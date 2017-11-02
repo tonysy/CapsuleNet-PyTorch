@@ -2,6 +2,10 @@ import numpy as np
 from config import config
 import torch
 import torch.nn as nn
+from torch.nn.Module import Conv2d
+
+
+
 
 class CapsuleLayer(nn.Module):
     """ Capsule Layer
