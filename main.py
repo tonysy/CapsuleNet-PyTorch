@@ -36,6 +36,9 @@ def train(args, model, optimizer, epoch_index, train_loader, capsule_loss):
 
     for batch_idx, (X, y) in enumerate(train_loader):
         if args.cuda:
+            y = torch.LongTensor(y)
+            # import pdb
+            # pdb.set_trace()
             X, y = X.cuda(), y.cuda()
         X, y = Variable(X), Variable(y)
         optimizer.zero_grad()
