@@ -13,7 +13,7 @@ def parse_args():
     parser = argparse.ArgumentParser(description='CapsuelNet Pytorch MINIST Example')
     parser.add_argument('--batch-size', type=int, default=64, metavar='N',
                     help='input batch size for training (default: 64)')
-    parser.add_argument('--test-batch-size', type=int, default=1000, metavar='N',
+    parser.add_argument('--test-batch-size', type=int, default=64, metavar='N',
                     help='input batch size for testing (default: 1000)')
     parser.add_argument('--epochs', type=int, default=10, metavar='N',
                     help='number of epochs to train (default: 10)')
@@ -31,44 +31,50 @@ def parse_args():
     args.cuda = not args.no_cuda and torch.cuda.is_available()
 
     return args
-def train(args, model, optimizer, epoch_index, train_loader, capsule_loss):
+def train(args, num_classes, model, optimizer, epoch_index, train_loader, capsule_loss):
     model.train()
 
     for batch_idx, (X, y) in enumerate(train_loader):
+        y_onehot = torch.zeros(y.size()[0],num_classes).scatter_(1, y.unsqueeze(-1), 1)
         if args.cuda:
-            y = torch.LongTensor(y)
-            # import pdb
-            # pdb.set_trace()
             X, y = X.cuda(), y.cuda()
         X, y = Variable(X), Variable(y)
+
         optimizer.zero_grad()
-        prob, reconstructions = model(X, y)
-        loss = capsule_loss(X, y, prob, reconstructions)
+        prob, X_l2norm, reconstructions = model(X, y, with_label=True)
+        loss = capsule_loss(num_classes, X, y_onehot, X_l2norm, reconstructions)
+        # pdb.set_trace()
         loss.backward()
         optimizer.step()
+        # break
         if batch_idx % args.log_interval == 0:
             print('Train Epoch: {} [{}/{} ({:.0f}%)]\tLoss: {:.6f}'.format(
                 epoch_index, batch_idx * len(X), len(train_loader.dataset),
                 100. * batch_idx / len(train_loader), loss.data[0]))
         
-def test(args, model, test_loader,capsule_loss):
+def test(args, num_classes, model, test_loader,capsule_loss):
     model.eval()
     test_loss = 0
     num_correct = 0
-    for X, y in test_loader:
+    # for X, y in test_loader:
+    for batch_idx, (X, y) in enumerate(test_loader):
+        y_onehot = torch.zeros(y.size()[0],num_classes).scatter_(1, y.unsqueeze(-1), 1)
         if args.cuda:
             X, y = X.cuda(), y.cuda()
         X, y = Variable(X, volatile=True), Variable(y)
-        prob, reconstructions = model(X, y)
-        loss = capsule_loss(X, y, prob, reconstructions)
+        prob,X_l2norm, reconstructions = model(X, y, with_label=True)
+        loss = capsule_loss(num_classes, X, y_onehot, X_l2norm, reconstructions)
         test_loss += loss
 
         pred_y = prob.data.max(1, keepdim=True)[1]
         num_correct += pred_y.eq(y.data.view_as(pred_y)).cpu().sum()
+        if batch_idx % args.log_interval == 0:
+            # import pdb; pdb.set_trace()
+            print('Test Index:[{}/{}]'.format(batch_idx * len(X), len(test_loader.dataset)))
 
     test_loss /= len(test_loader.dataset)
-    print('\nTest set: Average loss: {:.4f}, Accuracy: {}/{} ({:.0f}%)\n'.format(test_loss, num_correct, len(test_loader.dataset),
-    100. * num_correct / len(test_loader.dataset)))
+    # import pdb ; pdb.set_trace()
+    print('\nTest set: Average loss: {:.4f}, Accuracy: {}/{} ({:.0f}%)\n'.format(test_loss.data[0], num_correct, len(test_loader.dataset), 100. * num_correct / len(test_loader.dataset)))
 
 def main():
     args = parse_args()
@@ -103,11 +109,14 @@ def main():
     if args.cuda:
         capsule_model.cuda()
     
+    # optimizer = optim.SGD(capsule_model.parameters(), lr=args.lr, momentum=args.momentum)
+
     optimizer = optim.Adam(capsule_model.parameters())
     capsule_loss = CapsuleLoss()
+    num_calsses=10
     for epoch_index in range(1, args.epochs + 1):
-        train(args, capsule_model, optimizer, epoch_index, train_loader, capsule_loss)
-        test(args, capsule_model, test_loader, capsule_loss)
+        train(args, num_calsses, capsule_model, optimizer, epoch_index, train_loader, capsule_loss)
+        test(args, num_calsses, capsule_model, test_loader, capsule_loss)
     
 if __name__ == '__main__':
     main()

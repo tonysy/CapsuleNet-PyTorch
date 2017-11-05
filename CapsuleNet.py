@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-
+from torch.autograd import Variable
 from CapsuleLayer import CapsuleConv, CapsuleLinear
 
 class CapsuleNet(nn.Module):
@@ -22,56 +22,59 @@ class CapsuleNet(nn.Module):
                                 nn.ReLU(inplace=True),
                                 nn.Linear(512, 1024),
                                 nn.ReLU(inplace=True),
+                                nn.Linear(1024, 784),
                                 nn.Sigmoid()
                             )
-    def onehot(self):
-        batch_size = 5
-        nb_digits = 10
-        # Dummy input that HAS to be 2D for the scatter (you can use view(-1,1) if needed)
-        y = torch.LongTensor(batch_size,1).random_() % nb_digits
-        # One hot encoding buffer that you create out of the loop and just keep reusing
-        y_onehot = torch.FloatTensor(batch_size, nb_digits)
 
-        # In your for loop
-        y_onehot.zero_()
-        y_onehot.scatter_(1, y, 1)
-        return y, y_onehot
-        print(y)
-        print(y_onehot)
-
-    def forward(self, X, y):
+    def forward(self, X, y=None, with_label=True):
+        import pdb
+        # pdb.set_trace()
         # input batch_sizex1x28x28
         X = F.elu(self.conv1(X), inplace=True)
         X = self.primary_capsules(X)
-        X = self.digit_capsules(X).squeeze()
+        # batch_size x 10 x 16
+        X = self.digit_capsules(X)
+        X = X.view(X.size(0),X.size(2),X.size(4))
         X_l2norm = torch.sqrt((X ** 2).sum(dim=-1))
         prob = F.softmax(X_l2norm)
 
-        max_len_indices = y.max(dim=0)
+        if with_label:
+            # size: batch_size
+            max_len_indices = y
+            
+        else:
+            # size: batch_size
+            max_len_indices = prob.max(dim=1)
+        import pdb
+        # pdb.set_trace()
+        batch_activated_capsules = X[range(X.size()[0]), max_len_indices.data] # batch_size x 16
 
-        vectors = []
-        for batch, index in enumerate(max_len_indices):
-            vectors.append(X[batch, index.data[0], :])
+        reconstructions = self.decoder_module(batch_activated_capsules)
 
-        reconstructions = self.decoder_module(torch.stack(vectors, dim=0))
-
-        return prob, reconstructions
+        return prob, X_l2norm, reconstructions
 
 class CapsuleLoss(nn.Module):
     def __init__(self):
         super(CapsuleLoss, self).__init__()
-        self.reconstruction_loss = nn.MSELoss(size_average=False)
+        
+        self.reconstruction_loss = nn.MSELoss(size_average=True)
 
-    def forward(self, images, labels, prob_X, reconstructions, 
+    def forward(self, num_classes, images, labels, X_l2norm, reconstructions, 
                 lambda_value=0.5, scale_factor=0.0005):
-        first_term_base = F.elu(0.9 - prob_X, inplace=True) ** 2
-        second_term_base = F.elu(prob_X - 0.1, inplace=True) ** 2
-
+        self.num_classes = num_classes
+        # import pdb; pdb.set_trace()
+        # first_term_base = F.elu(0.9 - X_l2norm, inplace=True) ** 2
+        # second_term_base = F.elu(X_l2norm - 0.1, inplace=True) ** 2
+        zeros = Variable(torch.zeros(1)).cuda()
+        first_term_base = torch.max(0.9 - X_l2norm,zeros) ** 2
+        second_term_base = torch.max(X_l2norm - 0.1, zeros) ** 2
+        labels = Variable(torch.FloatTensor(labels).cuda())
         margin_loss = labels * first_term_base + lambda_value * \
                         (1.0 - labels) * second_term_base
-        margin_loss = margin_loss.sum().mean()
+        # margin_loss = Variable(labels * first_term_base.data + lambda_value * \
+                        # (1.0 - labels) * second_term_base.data)
+        margin_loss = margin_loss.sum(dim=1).mean()
 
         reconstruction_loss = self.reconstruction_loss(reconstructions, images)
 
-        return (margin_loss + scale_factor * reconstruction_loss) / images.size(0)
-
+        return margin_loss + scale_factor * reconstruction_loss
