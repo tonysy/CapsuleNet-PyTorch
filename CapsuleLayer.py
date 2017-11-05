@@ -26,7 +26,6 @@ class CapsuleConv(nn.Module):
                                 kernel_size=kernel_size, stride=stride, padding=padding) 
                                 for item in range(dim_vector)])
        
-        self.rout_weights = nn.Parameter(torch.randn(dim_vector, num_routing_nodes, in_channels, out_channels))
 
     def squash(self, tensor):
         """Batch Squashing Function
@@ -115,10 +114,10 @@ class CapsuleLinear(nn.Module):
         #  1,num_capsule, 1, self.dim_input_vector)
         # (1,1152,10,8,16)
         routing_weight = nn.Parameter(torch.randn(1, self.num_capsules_prev,
-                                self.out_channels,self.dim_input_vector,self.dim_vector))
+                                self.out_channels,self.dim_input_vector,self.dim_vector)).cuda()
 
         # (batch_size,1152,1,1,8)x(1,1152,10,8,16)-->(batch_size,1152,10,1,16)
-        linear_combination = torch.matmul(X_tile,  routing_weight)# X_hat = X * W
+        linear_combination = torch.matmul(X,  routing_weight)# X_hat = X * W
         # (1,1152,10,1,1)
         # priors = Variable(torch.zeros(1, self.num_capsules_prev, self.out_channels,1, 1)).cuda() # b_ij
         priors = Variable(torch.zeros(*linear_combination.size())).cuda() # b_ij
@@ -129,10 +128,11 @@ class CapsuleLinear(nn.Module):
         for iter_index in range(self.num_routing_iter):
             # NOTE: RoutingAlgorithm-line 4
             softmax_prior = self.softmax(priors,dim=1) # on num_capsule dimension
-            s_size = softmax_prior.size()
+            # s_size = softmax_prior.size()
             # tile on first dimension for the batch_size
             # (64, 1152, 10, 1,1)
-            softmax_prior = torch.cat([softmax_prior] * self.batch_size, dim=0)# c_ij
+            # softmax_prior = torch.cat([softmax_prior] * self.batch_size, dim=0)# c_ij
+            
             # NOTE: RoutingAlgorithm-line 5
             # (64, 1152, 10, 1,16)
             # output = torch.mul(softmax_prior, linear_combination)
@@ -141,6 +141,7 @@ class CapsuleLinear(nn.Module):
             output_sum = output.sum(dim=1, keepdim=True) # s_J
 
             # NOTE: RoutingAlgorithm-line 6
+            # (64, 1, 10, 1, 16)
             output_squashed = self.squash(output_sum) # v_J
 
             # NOTE: RoutingAlgorithm-line 7
@@ -148,8 +149,8 @@ class CapsuleLinear(nn.Module):
             output_tiled = torch.cat([output_squashed]*self.num_capsules_prev, dim=1)
             # (64, 1152, 10, 1, 16) x (64, 1152, 10, 16, 1)
             # ==> (64, 1152, 10, 1, 1)
-            U_times_v = torch.matmul(linear_combination, output_tiled.transpose(-2,-1))
-            priors = priors + U_times_v.mean(dim=0,keepdim=True)
+            U_times_v = torch.matmul(linear_combination, output_squashed.transpose(-2,-1))
+            priors = priors + U_times_v # .mean(dim=0,keepdim=True)
     
         
         return output_squashed # v_J
