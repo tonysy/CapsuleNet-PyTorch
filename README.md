@@ -2,7 +2,7 @@
 
 I hvae crated `CapsuleConv` for PrimaryCapsule, `CapsuleLinear` for DigitCapsule
 
-`minist example from pytorch github code repo`
+*minist_toy_example.py*: minist example from pytorch github code repo
 
 # Usage
 
