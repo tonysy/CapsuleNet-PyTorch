@@ -9,6 +9,8 @@ from torchvision import datasets, transforms
 from torch.autograd import Variable 
 from CapsuleNet import CapsuleNet, CapsuleLoss
 
+from tqdm import tqdm
+
 def parse_args():
     parser = argparse.ArgumentParser(description='CapsuelNet Pytorch MINIST Example')
     parser.add_argument('--batch-size', type=int, default=64, metavar='N',
@@ -33,7 +35,8 @@ def parse_args():
     return args
 def train(args, num_classes, model, optimizer, epoch_index, train_loader, capsule_loss):
     model.train()
-
+    # num_batch = int(60000 / args.batch_size)
+    # for batch_idx, (X, y) in tqdm(enumerate(train_loader), total=num_batch, ncols=70, leave=False, unit='b'):
     for batch_idx, (X, y) in enumerate(train_loader):
         y_onehot = torch.zeros(y.size()[0],num_classes).scatter_(1, y.unsqueeze(-1), 1)
         if args.cuda:

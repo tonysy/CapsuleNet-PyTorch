@@ -122,7 +122,7 @@ class CapsuleLinear(nn.Module):
         ############################################################################
         for iter_index in range(self.num_routing_iter):
             # NOTE: RoutingAlgorithm-line 4
-            softmax_prior = self.softmax(priors,dim=2) # on num_capsule dimension
+            softmax_prior = self.softmax(priors,dim=1) # on num_capsule dimension
            
             # NOTE: RoutingAlgorithm-line 5
             # (64, 1152, 10, 1,16)
