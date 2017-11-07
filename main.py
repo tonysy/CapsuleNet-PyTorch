@@ -43,17 +43,9 @@ def train(args, num_classes, model, optimizer, epoch_index, train_loader, capsul
         optimizer.zero_grad()
         prob, X_l2norm, reconstructions = model(X, y, with_label=True)
         loss = capsule_loss(num_classes, X, y_onehot, X_l2norm, reconstructions)
-        a0 = list(model.parameters())[0].clone()
-        a1 = list(model.parameters())[1].clone()
+
         loss.backward()
-        import pdb; pdb.set_trace()
-        b = list(model.parameters())
-        b0 = list(model.parameters())[0].clone()
-        b1 = list(model.parameters())[1].clone()
-        
-        print(torch.equal(a0.grad, b0.grad))
-        print(torch.equal(a1.grad, b1.grad))
-        import pdb; pdb.set_trace()
+
         optimizer.step()
         # break
         if batch_idx % args.log_interval == 0:
